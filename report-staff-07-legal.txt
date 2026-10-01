@@ -1,0 +1,286 @@
+==============================================================================
+CERTI-V QA - TMS (STAFF) SIDE LOAD TEST DIAGNOSTIC REPORT
+staff-07-legal.js - Legal Officer scheduling, notice and decision drafting
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:30:47Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : ramp 0 -> 10 VUs (10s), 10 -> 20 VUs (20s), 20 -> 0 (5s); 35s total
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED. 7151 of 7151 requests failed. No hearing was scheduled, so no slot
+contention occurred. In the code, overlapping bookings are already serialized
+with a row lock and a unique constraint.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                                   REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+----------------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/staff-login/                   1      79.7      79.7      79.7  500 x1
+GET /legal/queue/                           325      11.0      34.3     222.6  401 x325
+GET /legal/hearing-slots/                   325       7.0      21.2     247.2  401 x325
+GET /legal/available-slots/                 325       5.2      19.4      42.3  401 x325
+GET /legal/check-availability/              325       5.1      21.2      41.0  401 x325
+POST /legal/schedule-hearing/<id>/          325       4.9      15.5      45.3  401 x325
+GET /legal/notice/<id>/                     325       4.7      16.5      87.2  401 x325
+GET /legal/notice-signature-status/<id>/    325       5.5      23.6      44.6  401 x325
+POST /legal/forward-notice/<id>/            325       4.7      13.2      38.5  401 x325
+POST /legal/verify-password/                325       5.0      18.3      87.6  401 x325
+POST /legal/send-notice/<id>/               325       4.6      15.8      55.2  401 x325
+POST /legal/preview-notice/<id>/            325       4.6      12.0      34.1  401 x325
+GET /legal/notice-document/<id>/            325       4.7      14.9      42.5  401 x325
+GET /legal/decision-queue/                  325       4.3      15.8      36.6  401 x325
+GET /legal/decision/<id>/                   325       4.9      17.3      59.5  401 x325
+POST /legal/draft-decision/<id>/            325       4.3      11.4      59.9  401 x325
+POST /legal/preview-decision/<id>/          325       4.6      18.1      44.8  401 x325
+GET /legal/decision-document/<id>/          325       4.2      12.5      69.1  401 x325
+POST /legal/forward-to-ctdo/<id>/           325       4.0      12.3      28.8  401 x325
+GET /legal/history/                         325       4.2      11.1      39.3  401 x325
+GET /legal/schedule/                        325       4.2      12.9      29.4  401 x325
+GET /legal/reports/                         325       4.0      11.4      36.3  401 x325
+POST /sign/<token>/upload/                  325     139.1     285.6     383.7  500 x325
+TOTAL                                      7151
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<1500' p(95)=40.12ms
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=100.00%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 7151    200.78202/s
+    checks_succeeded...: 0.00%   0 out of 7151
+    checks_failed......: 100.00% 7151 out of 7151
+
+    ✗ POST /accounts/staff-login/ -> 200
+      ↳  0% — ✓ 0 / ✗ 1
+    ✗ GET /legal/queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ GET /legal/hearing-slots/ -> 200
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ GET /legal/available-slots/ -> 200
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ GET /legal/check-availability/ -> 200
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ POST /legal/schedule-hearing/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ GET /legal/notice/<id>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ GET /legal/notice-signature-status/<id>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ POST /legal/forward-notice/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ POST /legal/verify-password/ -> 400
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ POST /legal/send-notice/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ POST /legal/preview-notice/<id>/ -> 200|400
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ GET /legal/notice-document/<id>/ -> 200|404
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ GET /legal/decision-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ GET /legal/decision/<id>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ POST /legal/draft-decision/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ POST /legal/preview-decision/<id>/ -> 200|400
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ GET /legal/decision-document/<id>/ -> 200|404
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ POST /legal/forward-to-ctdo/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ GET /legal/history/ -> 200
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ GET /legal/schedule/ -> 200
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ GET /legal/reports/ -> 200
+      ↳  0% — ✓ 0 / ✗ 325
+    ✗ POST /sign/<token>/upload/ -> 404
+      ↳  0% — ✓ 0 / ✗ 325
+
+    HTTP
+    http_req_duration....: avg=11.13ms min=0s    med=2.89ms max=383.67ms p(90)=15.89ms p(95)=40.12ms
+    http_req_failed......: 100.00% 7151 out of 7151
+    http_reqs............: 7151    200.78202/s
+
+    EXECUTION
+    iteration_duration...: avg=1.24s   min=1.09s med=1.21s  max=1.7s     p(90)=1.43s   p(95)=1.48s
+    iterations...........: 325     9.125179/s
+    vus..................: 4       min=1            max=19
+    vus_max..............: 20      min=20           max=20
+
+    NETWORK
+    data_received........: 48 MB   1.4 MB/s
+    data_sent............: 116 MB  3.2 MB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/staff-login/ -> 500 (ProgrammingError: column
+      accounts_user.contact_no_2 does not exist)
+  GET /legal/queue/ -> 401 ({"detail":"Authentication credentials were not
+      provided."})
+  GET /legal/hearing-slots/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+  GET /legal/available-slots/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  GET /legal/check-availability/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  POST /legal/schedule-hearing/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /legal/notice/<id>/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+  GET /legal/notice-signature-status/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /legal/forward-notice/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /legal/verify-password/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  POST /legal/send-notice/<id>/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  POST /legal/preview-notice/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /legal/notice-document/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /legal/decision-queue/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  GET /legal/decision/<id>/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+  POST /legal/draft-decision/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /legal/preview-decision/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /legal/decision-document/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /legal/forward-to-ctdo/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /legal/history/ -> 401 ({"detail":"Authentication credentials were not
+      provided."})
+  GET /legal/schedule/ -> 401 ({"detail":"Authentication credentials were not
+      provided."})
+  GET /legal/reports/ -> 401 ({"detail":"Authentication credentials were not
+      provided."})
+  POST /sign/<token>/upload/ -> 500 (ProgrammingError: relation
+      "legal_hearingofficersignaturerequest" does not exist)
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=319.9 threads=41 cpu_s=565.3
+  after  : pid=6780 rss_mb=325.5 threads=41 cpu_s=593.4
+  GET /api/health/ after the run : 200 in 0.209109s
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+The setup login failed (500, missing column accounts_user.contact_no_2). The
+21 authenticated endpoints returned 401 on each of the 325 iterations, in
+about 4 to 11 ms.
+
+POST /sign/<token>/upload/ needs no login and failed on its own: 500 on all
+325 calls, "relation legal_hearingofficersignaturerequest does not exist" (the
+legal migrations are unapplied). With the table present, the invalid token
+used by this script should produce 404.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  Database row contention and transaction failures on calendar models when
+  multiple legal officers attempt to compute and write to overlapping schedule
+  slots at the same instant.
+
+Status: NOT OBSERVED and NOT EXERCISED. The main case is handled in the code;
+        two narrower gaps remain.
+
+Evidence from the backend source:
+- Handled: HearingSlot has a unique constraint on (date, time)
+  (legal/models.py:22), and schedule_hearing books inside transaction.atomic
+  with select_for_update on the slot row (legal/views.py:301-306). Two
+  officers booking the same slot are serialized; the second receives 400 "This
+  time slot is already booked". That is brief, intended row contention, not a
+  failure.
+
+- Gap: the daily limit is checked outside the lock (day_booking_count,
+  legal/views.py:297; MAX_SLOTS_PER_DAY = 4 in legal/utils.py). Concurrent
+  bookings of different slots on one day can exceed it.
+
+- Gap: the only exception handled around the booking is Hearing.DoesNotExist
+  (views.py:318). Two simultaneous requests for the same application on
+  different slots would violate the one-hearing-per-application constraint and
+  surface as an unhandled 500.
+
+- Heavier than scheduling: send_notice, preview-notice, preview-decision and
+  forward-to-ctdo each build a DOCX and convert it to PDF through Microsoft
+  Word on the request thread (legal/views.py:628, :730, :977, :1053).
+
+- Spec corrections: check-availability is a GET with ?date and ?time (the
+  brief lists POST); preview-notice and preview-decision are POST (the brief
+  lists GET); /sign/<token>/upload/ is mounted at the site root, not under
+  /api.
+
+- To test the gaps: run with -e MUTATE=1 against disposable applications in
+  the legal queue. The script already makes every VU book slots on the same
+  day.
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Create one staff account per role with `python manage.py create_user`
+  (Receiving Officer, CTDO, Financial Analyst, Cashier, Legal Officer, ORD,
+  Records Officer) and pass the usernames through STAFF_<ROLE>_USER, or use
+  the defaults in lib.js.
+
+- Seed applications at each workflow stage, at a realistic volume, so the
+  queues and reports have rows to read.
+
+- Re-run this script. By default the workflow POSTs target id 0 and change
+  nothing; run with -e MUTATE=1 against disposable data to push real cases
+  through the transition under load.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run staff-07-legal.js
+  Environment: BASE_URL, STAFF_<ROLE>_USER, STAFF_PASS, PEAK_VUS, MUTATE

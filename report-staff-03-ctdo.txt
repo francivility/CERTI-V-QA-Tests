@@ -1,0 +1,192 @@
+==============================================================================
+CERTI-V QA - TMS (STAFF) SIDE LOAD TEST DIAGNOSTIC REPORT
+staff-03-ctdo.js - CTDO queue, document flags, decision and reports
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:28:03Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : ramp 0 -> 10 VUs (10s), 10 -> 20 VUs (20s), 20 -> 0 (5s); 35s total
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED. 2389 of 2389 requests failed, all on authentication. No aggregation
+query ran and no lock contention was observed.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                                       REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+--------------------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/staff-login/                       1     106.7     106.7     106.7  500 x1
+GET /applications/ctdo-queue/                   398       2.2       3.5       6.6  401 x398
+POST /applications/flag-document/<doc_id>/      398       2.2       4.1       8.0  401 x398
+POST /applications/unflag-document/<doc_id>/    398       1.7       3.6       5.9  401 x398
+POST /applications/<id>/ctdo-decision/          398       1.6       3.1       7.1  401 x398
+GET /applications/ctdo-history/                 398       2.3       3.9     306.4  401 x398
+GET /legal/ctdo-reports/                        398       1.4       3.5       9.2  401 x398
+TOTAL                                          2389
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<1500' p(95)=3.7ms
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=100.00%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 2389    67.075573/s
+    checks_succeeded...: 0.00%   0 out of 2389
+    checks_failed......: 100.00% 2389 out of 2389
+
+    ✗ POST /accounts/staff-login/ -> 200
+      ↳  0% — ✓ 0 / ✗ 1
+    ✗ GET /applications/ctdo-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 398
+    ✗ POST /applications/flag-document/<doc_id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 398
+    ✗ POST /applications/unflag-document/<doc_id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 398
+    ✗ POST /applications/<id>/ctdo-decision/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 398
+    ✗ GET /applications/ctdo-history/ -> 200
+      ↳  0% — ✓ 0 / ✗ 398
+    ✗ GET /legal/ctdo-reports/ -> 200
+      ↳  0% — ✓ 0 / ✗ 398
+
+    HTTP
+    http_req_duration....: avg=1.93ms min=0s med=1.52ms max=306.4ms p(90)=2.91ms p(95)=3.7ms
+    http_req_failed......: 100.00% 2389 out of 2389
+    http_reqs............: 2389    67.075573/s
+
+    EXECUTION
+    iteration_duration...: avg=1.01s  min=1s med=1.01s  max=1.31s   p(90)=1.01s  p(95)=1.01s
+    iterations...........: 398     11.174583/s
+    vus..................: 2       min=1            max=20
+    vus_max..............: 20      min=20           max=20
+
+    NETWORK
+    data_received........: 1.2 MB  33 kB/s
+    data_sent............: 316 kB  8.9 kB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/staff-login/ -> 500 (ProgrammingError: column
+      accounts_user.contact_no_2 does not exist)
+  GET /applications/ctdo-queue/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  POST /applications/flag-document/<doc_id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /applications/unflag-document/<doc_id>/ -> 401
+      ({"detail":"Authentication credentials were not provided."})
+  POST /applications/<id>/ctdo-decision/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /applications/ctdo-history/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /legal/ctdo-reports/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=319.6 threads=41 cpu_s=533.9
+  after  : pid=6780 rss_mb=319.7 threads=45 cpu_s=541.3
+  GET /api/health/ after the run : 200 in 0.213924s
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+The setup login failed (500, missing column accounts_user.contact_no_2). All
+six endpoints require a token and returned 401 on each of the 398 iterations,
+in about 2 ms. GET /legal/ctdo-reports/, the aggregation endpoint this script
+is meant to stress, never executed.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  Operational database locking caused by intensive real-time mathematical
+  aggregation loops (COUNT, SUM, AVG) running continuously on the main
+  application transactional tables without a caching layer.
+
+Status: NOT OBSERVED and NOT EXERCISED. Half supported by the code: no cache,
+        but no locking either.
+
+Evidence from the backend source:
+- Consistent: ctdo_reports recomputes everything on each request, about eight
+  COUNT / GROUP BY queries over the applications and decision tables
+  (legal/views.py:1453-1500). There is no cache: settings.py defines no CACHES
+  and nothing in the code calls the cache API.
+
+- Contradicted: these are read-only aggregates (COUNT with GROUP BY; no SUM or
+  AVG on this endpoint). Under PostgreSQL's MVCC they do not block inserts or
+  updates on the same tables. The cost is repeated CPU and I/O per request,
+  not locking.
+
+- Not measurable: the tables are absent, and the cost depends on row counts.
+
+- Related: ctdo_history joins the status log, applies DISTINCT and then loads
+  the profile and CPC type per row (applications/views.py:819-831),
+  unpaginated.
+
+- Separate defect from reading the code: ctdo_decision moves any application
+  to pending_assessment or needs_correction without checking that it is
+  currently pending_ctdo (applications/views.py:879-895).
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Create one staff account per role with `python manage.py create_user`
+  (Receiving Officer, CTDO, Financial Analyst, Cashier, Legal Officer, ORD,
+  Records Officer) and pass the usernames through STAFF_<ROLE>_USER, or use
+  the defaults in lib.js.
+
+- Seed applications at each workflow stage, at a realistic volume, so the
+  queues and reports have rows to read.
+
+- Re-run this script. By default the workflow POSTs target id 0 and change
+  nothing; run with -e MUTATE=1 against disposable data to push real cases
+  through the transition under load.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run staff-03-ctdo.js
+  Environment: BASE_URL, STAFF_<ROLE>_USER, STAFF_PASS, PEAK_VUS, MUTATE

@@ -1,0 +1,220 @@
+==============================================================================
+CERTI-V QA - APPLICANT SIDE LOAD TEST DIAGNOSTIC REPORT
+applicant-05-payments.js - Payments, notifications, CPC release and hearing notice
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:14:20Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : ramp 0 -> 10 VUs (10s), 10 -> 20 VUs (20s), 20 -> 0 (5s); 35s total
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED. 4027 of 4027 requests failed, all on authentication. No request
+reached Xendit, and no thread exhaustion was observed: the server answered
+requests in about 21 ms at p95 overall.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                                 REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+--------------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/login/                       1     125.3     125.3     125.3  500 x1
+GET /payments/my-payments/                366      10.1      20.2     349.7  401 x366
+GET /payments/my-bill/<id>/               366      10.1      21.6     329.6  401 x366
+POST /payments/<id>/choose-method/        366       9.0      20.5     305.8  401 x366
+POST /payments/<id>/xendit/checkout/      366       9.5      22.0     405.2  401 x366
+GET /payments/<id>/xendit/status/         366       9.6      25.0     109.3  401 x366
+GET /payments/my-receipt/<id>/            366       8.3      20.2      45.0  401 x366
+GET /applications/notifications/          366       8.1      21.1      30.0  401 x366
+POST /applications/notifications/read/    366       8.0      19.9      31.8  401 x366
+GET /records/my-cpc/<id>/                 366      10.2      20.7     339.5  401 x366
+GET /records/my-cpc/<id>/document/        366       9.4      21.2     414.4  401 x366
+GET /legal/applicant-notice/<id>/         366       7.3      19.7      34.2  401 x366
+TOTAL                                    4027
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<1500' p(95)=21.01ms
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=100.00%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 4027    112.256704/s
+    checks_succeeded...: 0.00%   0 out of 4027
+    checks_failed......: 100.00% 4027 out of 4027
+
+    ✗ POST /accounts/login/ -> 200
+      ↳  0% — ✓ 0 / ✗ 1
+    ✗ GET /payments/my-payments/ -> 200
+      ↳  0% — ✓ 0 / ✗ 366
+    ✗ GET /payments/my-bill/<id>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 366
+    ✗ POST /payments/<id>/choose-method/ -> 200|400
+      ↳  0% — ✓ 0 / ✗ 366
+    ✗ POST /payments/<id>/xendit/checkout/ -> 200|400|502
+      ↳  0% — ✓ 0 / ✗ 366
+    ✗ GET /payments/<id>/xendit/status/ -> 200
+      ↳  0% — ✓ 0 / ✗ 366
+    ✗ GET /payments/my-receipt/<id>/ -> 200|404
+      ↳  0% — ✓ 0 / ✗ 366
+    ✗ GET /applications/notifications/ -> 200
+      ↳  0% — ✓ 0 / ✗ 366
+    ✗ POST /applications/notifications/read/ -> 200
+      ↳  0% — ✓ 0 / ✗ 366
+    ✗ GET /records/my-cpc/<id>/ -> 200|400
+      ↳  0% — ✓ 0 / ✗ 366
+    ✗ GET /records/my-cpc/<id>/document/ -> 200|400|404
+      ↳  0% — ✓ 0 / ✗ 366
+    ✗ GET /legal/applicant-notice/<id>/ -> 200|404
+      ↳  0% — ✓ 0 / ✗ 366
+
+    HTTP
+    http_req_duration....: avg=9.08ms min=0s    med=5.81ms max=414.42ms p(90)=17.34ms p(95)=21.01ms
+    http_req_failed......: 100.00% 4027 out of 4027
+    http_reqs............: 4027    112.256704/s
+
+    EXECUTION
+    iteration_duration...: avg=1.1s   min=1.01s med=1.07s  max=1.65s    p(90)=1.18s   p(95)=1.27s
+    iterations...........: 366     10.202621/s
+    vus..................: 2       min=1            max=20
+    vus_max..............: 20      min=20           max=20
+
+    NETWORK
+    data_received........: 1.9 MB  52 kB/s
+    data_sent............: 461 kB  13 kB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/login/ -> 500 (ProgrammingError: column
+      accounts_user.contact_no_2 does not exist)
+  GET /payments/my-payments/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  GET /payments/my-bill/<id>/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  POST /payments/<id>/choose-method/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /payments/<id>/xendit/checkout/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /payments/<id>/xendit/status/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /payments/my-receipt/<id>/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  GET /applications/notifications/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /applications/notifications/read/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /records/my-cpc/<id>/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+  GET /records/my-cpc/<id>/document/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /legal/applicant-notice/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=325.5 threads=43 cpu_s=396.4
+  after  : pid=6780 rss_mb=311.5 threads=43 cpu_s=410.2
+  GET /api/health/ after the run : 200 in 0.210187s
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+The setup login failed (500, missing column accounts_user.contact_no_2). All
+eleven endpoints in this script require a token, so every one of the 366
+iterations received 401 on every call. Because DRF rejects an unauthenticated
+request before touching the database, these responses were fast (about 9 ms
+average) and say nothing about the payment code.
+
+No view body ran in this script: not the bill builder, not the Xendit client,
+not the receipt, CPC or notice lookups.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  Thread pool exhaustion caused by hanging synchronous external API
+  connections to the third-party payment provider (Xendit) blocking incoming
+  server requests.
+
+Status: NOT OBSERVED and NOT EXERCISED. A plausible design risk, bounded by a
+        timeout.
+
+Evidence from the backend source:
+- Consistent: Xendit is called synchronously on the request thread with the
+  requests library (payments/xendit_service.py:20 and :45). A slow Xendit
+  holds that request for as long as the call takes.
+
+- Qualifier: both calls set timeout=30, so a request cannot hang indefinitely.
+  The exposure is 30 s per call, not unbounded.
+
+- Qualifier: the server under test is Django's development server (response
+  header "WSGIServer/0.2"), which starts a thread per request and has no fixed
+  pool to exhaust. The risk applies to a production deployment with a fixed
+  number of sync workers.
+
+- Amplifier: GET /payments/<id>/xendit/status/ calls Xendit on every poll
+  (payments/xendit_views.py:82), so a polling front end multiplies the
+  exposure.
+
+- Not exercised: XENDIT_SECRET_KEY defaults to empty, in which case checkout
+  returns 502 without any network call.
+
+- Related hot spot in the code: mark_overdue_applications() runs on every my-
+  payments and my-bill read, and again once per application inside
+  _public_bill_data (payments/views.py:927 and :1072).
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Seed reference data (CPC types, requirement types, routes, proprietorship
+  types) and create the test applicant used by lib.js (APPLICANT_USER /
+  APPLICANT_PASS).
+
+- Re-run this script. Only then does the result say anything about behaviour
+  under concurrency.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run applicant-05-payments.js
+  Environment: BASE_URL, APPLICANT_USER, APPLICANT_PASS, PEAK_VUS

@@ -1,0 +1,207 @@
+==============================================================================
+CERTI-V QA - APPLICANT SIDE LOAD TEST DIAGNOSTIC REPORT
+applicant-03-qr-bridge.js - Identity verification session and QR bridge
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:12:54Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : ramp 0 -> 10 VUs (10s), 10 -> 20 VUs (20s), 20 -> 0 (5s); 35s total
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED. 606 of 606 requests failed and the p95 latency threshold was also
+missed (1.95 s against 1.5 s). The server did not crash. Disk I/O was not
+measured, and the QR bridge does not write images to local disk at all.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                                      REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+-------------------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/login/                            1      92.5      92.5      92.5  500 x1
+POST /verification/session/                     55     308.8     870.2    1417.6  403 x55
+GET /verification/session/<code>/              165     244.8     696.8     985.0  401 x165
+POST /verification/submit/<code>/               55     934.5    1606.6    1705.2  500 x55
+POST /applications/qr-bridge/upload/<code>/     55    1903.6    2891.7    3285.5  500 x55
+GET /applications/qr-bridge/pending/<code>/    165     927.3    1787.4    2181.5  500 x165
+GET /applications/qr-bridge/download/<id>/      55     933.5    1709.7    1993.6  500 x55
+POST /applications/qr-bridge/consume/<id>/      55     822.4    1503.3    1885.3  500 x55
+TOTAL                                          606
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✗ 'p(95)<1500' p(95)=1.95s
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=100.00%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 606     14.712831/s
+    checks_succeeded...: 0.00%   0 out of 606
+    checks_failed......: 100.00% 606 out of 606
+
+    ✗ POST /accounts/login/ -> 200
+      ↳  0% — ✓ 0 / ✗ 1
+    ✗ POST /verification/session/ -> 200
+      ↳  0% — ✓ 0 / ✗ 55
+    ✗ GET /verification/session/<code>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 165
+    ✗ POST /verification/submit/<code>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 55
+    ✗ POST /applications/qr-bridge/upload/<code>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 55
+    ✗ GET /applications/qr-bridge/pending/<code>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 165
+    ✗ GET /applications/qr-bridge/download/<id>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 55
+    ✗ POST /applications/qr-bridge/consume/<id>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 55
+
+    HTTP
+    http_req_duration....: avg=764.27ms min=2.13ms med=641.48ms max=3.28s  p(90)=1.66s  p(95)=1.95s
+    http_req_failed......: 100.00% 606 out of 606
+    http_reqs............: 606     14.712831/s
+
+    EXECUTION
+    iteration_duration...: avg=9.42s    min=3.27s  med=10.16s   max=13.56s p(90)=12.24s p(95)=12.58s
+    iterations...........: 55      1.335323/s
+    vus..................: 1       min=1          max=20
+    vus_max..............: 20      min=20         max=20
+
+    NETWORK
+    data_received........: 51 MB   1.2 MB/s
+    data_sent............: 58 MB   1.4 MB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/login/ -> 500 (ProgrammingError: column
+      accounts_user.contact_no_2 does not exist)
+  POST /verification/session/ -> 403 ({"detail":"Authentication credentials
+      were not provided."})
+  GET /verification/session/<code>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /verification/submit/<code>/ -> 500 (ProgrammingError: relation
+      "verification_verificationsession" does not exist)
+  POST /applications/qr-bridge/upload/<code>/ -> 500 (ProgrammingError:
+      relation "applications_qrbridgeupload" does not exist)
+  GET /applications/qr-bridge/pending/<code>/ -> 500 (ProgrammingError:
+      relation "applications_qrbridgeupload" does not exist)
+  GET /applications/qr-bridge/download/<id>/ -> 500 (ProgrammingError:
+      relation "applications_qrbridgeupload" does not exist)
+  POST /applications/qr-bridge/consume/<id>/ -> 500 (ProgrammingError:
+      relation "applications_qrbridgeupload" does not exist)
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=372.2 threads=42 cpu_s=289.4
+  after  : NOT LISTENING
+  GET /api/health/ after the run : 200 in 0.233930s
+  Note: "NOT LISTENING" is a miss by the port-owner probe, not an outage. The
+  health check taken at the same moment returned 200 and the next sample
+  shows the same PID with accumulated CPU time, so the process never exited.
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+The setup login failed (500, missing column accounts_user.contact_no_2), so
+POST /verification/session/ answered 403 and the session poll 401.
+
+The remaining five endpoints need no login and failed on their own: POST
+/verification/submit/<code>/ returned 500 because relation
+"verification_verificationsession" does not exist, and all four
+/applications/qr-bridge/ endpoints returned 500 because relation
+"applications_qrbridgeupload" does not exist. Neither table has been created
+(verification.0001 and applications.0010 are unapplied).
+
+The upload was the slowest call: 1.9 s average, 2.9 s p95, 3.3 s max.
+qr_bridge_upload receives the 353 KB JPEG and runs prepare_image() on it
+(applications/views.py:1094) before its first database statement, so real
+image processing ran on every call and the request then failed at the DELETE
+on the missing table. Server CPU time rose from 289 s before this script to
+396 s after script 04 (the sample between the two was missed), against about
+22 s for each of scripts 01 and 02. That suggests CPU-bound image work rather
+than storage, but it is not isolated to this script.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  Storage disk I/O saturation resulting from writing heavy binary image
+  uploads directly to local application disk drives, which starves the server
+  threads processing the laptop polling loop.
+
+Status: NOT OBSERVED. Contradicted by the code for the QR bridge.
+
+Evidence from the backend source:
+- Contradicted: QrBridgeUpload.image is a BinaryField
+  (applications/models.py:164). Bridge images are stored as rows in
+  PostgreSQL, and downloads are served from the row through an in-memory
+  buffer (applications/views.py:1135). Nothing is written to the application's
+  local disk on this path.
+
+- Not measured: no disk counters were collected, so this run can neither
+  confirm nor rule out I/O pressure on the database host.
+
+- Real risks visible in the code: every laptop poll (qr_bridge_pending,
+  views.py:1119) issues a DELETE as well as a SELECT, so the polling loop
+  writes on every request; uploads are held fully in memory (up to the 20 MB
+  limit in settings.py) and re-encoded on the request thread; verification
+  submit reads every selfie frame into memory (verification/views.py:156).
+
+- For local-disk writes, see the draft document upload in script 04, which
+  does use a FileField under MEDIA_ROOT.
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Seed reference data (CPC types, requirement types, routes, proprietorship
+  types) and create the test applicant used by lib.js (APPLICANT_USER /
+  APPLICANT_PASS).
+
+- Re-run this script. Only then does the result say anything about behaviour
+  under concurrency.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run applicant-03-qr-bridge.js
+  Environment: BASE_URL, APPLICANT_USER, APPLICANT_PASS, PEAK_VUS

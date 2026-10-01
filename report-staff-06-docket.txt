@@ -1,0 +1,172 @@
+==============================================================================
+CERTI-V QA - TMS (STAFF) SIDE LOAD TEST DIAGNOSTIC REPORT
+staff-06-docket.js - Paid queue and docket number generation
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:30:08Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : ramp 0 -> 10 VUs (10s), 10 -> 20 VUs (20s), 20 -> 0 (5s); 35s total
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED. 801 of 801 requests failed, all on authentication. No join ran, no
+connection pressure was observed, and nothing timed out: the slowest request
+took 94 ms.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                               REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+------------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/staff-login/               1      94.4      94.4      94.4  500 x1
+GET /payments/paid-queue/               400       2.1       3.5       5.1  401 x400
+POST /payments/generate-docket/<id>/    400       2.0       3.5       5.5  401 x400
+TOTAL                                   801
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<1500' p(95)=3.53ms
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=100.00%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 801     22.554543/s
+    checks_succeeded...: 0.00%   0 out of 801
+    checks_failed......: 100.00% 801 out of 801
+
+    ✗ POST /accounts/staff-login/ -> 200
+      ↳  0% — ✓ 0 / ✗ 1
+    ✗ GET /payments/paid-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 400
+    ✗ POST /payments/generate-docket/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 400
+
+    HTTP
+    http_req_duration....: avg=2.19ms min=0s med=2.04ms max=94.43ms p(90)=3.12ms p(95)=3.53ms
+    http_req_failed......: 100.00% 801 out of 801
+    http_reqs............: 801     22.554543/s
+
+    EXECUTION
+    iteration_duration...: avg=1s     min=1s med=1s     max=1s      p(90)=1s     p(95)=1s
+    iterations...........: 400     11.263192/s
+    vus..................: 3       min=1          max=20
+    vus_max..............: 20      min=20         max=20
+
+    NETWORK
+    data_received........: 511 kB  14 kB/s
+    data_sent............: 100 kB  2.8 kB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/staff-login/ -> 500 (ProgrammingError: column
+      accounts_user.contact_no_2 does not exist)
+  GET /payments/paid-queue/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+  POST /payments/generate-docket/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=319.6 threads=41 cpu_s=559.6
+  after  : pid=6780 rss_mb=319.9 threads=41 cpu_s=565.2
+  GET /api/health/ after the run : 200 in 0.219335s
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+The setup login failed (500, missing column accounts_user.contact_no_2). Both
+endpoints require a token and returned 401 on each of the 400 iterations, in
+about 2 ms.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  Connection pooling exhaustion at the server level due to massive SQL joins
+  pulling historical data from multiple tables simultaneously, causing
+  subsequent requests to time out.
+
+Status: NOT OBSERVED and NOT EXERCISED. Contradicted by the code.
+
+Evidence from the backend source:
+- Contradicted: there is no connection pool to exhaust. settings.py configures
+  a plain PostgreSQL connection with no pooler and no CONN_MAX_AGE, so Django
+  opens one connection per request thread and closes it afterwards. The limit
+  that could be reached is PostgreSQL's max_connections, under many
+  simultaneous threads.
+
+- Contradicted: neither endpoint performs a large join. paid_queue filters
+  applications by status and payment state (payments/views.py:704-708);
+  generate_docket loads one application.
+
+- Real costs in the code: paid_queue loads the profile, CPC type, payment and
+  SOA per row, unpaginated (views.py:709-719). generate_docket_number counts
+  dockets with a substring match on "-<year>-", which scans the applications
+  table on every call (payments/utils.py:46-49).
+
+- Real concurrency risk: the docket number comes from that count plus an
+  existence check, with no lock and no unique constraint on docket_number
+  (applications/models.py:57). Two cases docketed at the same instant can
+  receive the same number. The code comment acknowledges the race; the check
+  narrows it but does not close it.
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Create one staff account per role with `python manage.py create_user`
+  (Receiving Officer, CTDO, Financial Analyst, Cashier, Legal Officer, ORD,
+  Records Officer) and pass the usernames through STAFF_<ROLE>_USER, or use
+  the defaults in lib.js.
+
+- Seed applications at each workflow stage, at a realistic volume, so the
+  queues and reports have rows to read.
+
+- Re-run this script. By default the workflow POSTs target id 0 and change
+  nothing; run with -e MUTATE=1 against disposable data to push real cases
+  through the transition under load.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run staff-06-docket.js
+  Environment: BASE_URL, STAFF_<ROLE>_USER, STAFF_PASS, PEAK_VUS, MUTATE

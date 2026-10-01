@@ -1,0 +1,194 @@
+==============================================================================
+CERTI-V QA - TMS (STAFF) SIDE LOAD TEST DIAGNOSTIC REPORT
+staff-10-load.js - Concurrent staff logins and dashboard queues
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:32:44Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : 10 VUs constant for 30s; each iteration signs in as one of seven staff roles and reads that role's queue three times
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED on error rate (100%), PASSED on latency (p95 275 ms against 1.5 s). No
+dashboard query ran, so no query bottleneck was observed. 0 of 180 staff
+logins succeeded.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                             REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+----------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/staff-login/           180     219.3     460.7     606.0  500 x180
+GET /applications/ctdo-queue/         108       8.9      32.4     157.6  401 x108
+GET /records/release-queue/            54      11.6      59.3     101.6  401 x54
+GET /payments/assessment-queue/       108       5.5      22.3      60.2  401 x108
+GET /legal/ord-queue/                  54       8.3      39.4      54.2  401 x54
+GET /payments/payment-queue/           54       5.5      28.3      30.6  401 x54
+GET /legal/queue/                      54      11.5      43.9     231.1  401 x54
+GET /applications/receiving-queue/    108       7.7      32.1      75.3  401 x108
+TOTAL                                 720
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<1500' p(95)=274.67ms
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=100.00%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 720     22.663644/s
+    checks_succeeded...: 0.00%   0 out of 720
+    checks_failed......: 100.00% 720 out of 720
+
+    ✗ POST /accounts/staff-login/ -> 200
+      ↳  0% — ✓ 0 / ✗ 180
+    ✗ GET /applications/ctdo-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 108
+    ✗ GET /records/release-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 54
+    ✗ GET /payments/assessment-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 108
+    ✗ GET /legal/ord-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 54
+    ✗ GET /payments/payment-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 54
+    ✗ GET /legal/queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 54
+    ✗ GET /applications/receiving-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 108
+
+    HTTP
+    http_req_duration....: avg=60.93ms min=390.6µs med=4.91ms max=606.02ms p(90)=214.23ms p(95)=274.67ms
+    http_req_failed......: 100.00% 720 out of 720
+    http_reqs............: 720     22.663644/s
+
+    EXECUTION
+    iteration_duration...: avg=1.74s   min=1.58s   med=1.72s  max=2.11s    p(90)=1.95s    p(95)=1.99s
+    iterations...........: 180     5.665911/s
+    vus..................: 9       min=9          max=10
+    vus_max..............: 10      min=10         max=10
+
+    NETWORK
+    data_received........: 31 MB   980 kB/s
+    data_sent............: 88 kB   2.8 kB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/staff-login/ -> 500 (ProgrammingError: column
+      accounts_user.contact_no_2 does not exist)
+  GET /applications/receiving-queue/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=325.6 threads=41 cpu_s=609.6
+  after  : pid=6780 rss_mb=326.6 threads=41 cpu_s=624.4
+  GET /api/health/ after the run : 200 in 0.219273s
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+POST /accounts/staff-login/ returned 500 on all 180 attempts (missing column
+accounts_user.contact_no_2), averaging 219 ms with a p95 of 461 ms. Without a
+token, the seven queue endpoints returned 401 on all 540 reads, in 5 to 12 ms
+on average. A 401 is issued before any view code or SQL runs, so these figures
+say nothing about dashboard performance.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  Dashboard response degradation and query bottlenecks under concurrent staff
+  logins due to the total absence of a quick-access in-memory cache layer
+  (like Redis) for recurrently loaded view arrays.
+
+Status: NOT OBSERVED and NOT MEASURABLE yet. The absence of a cache is a fact;
+        its effect is unproven.
+
+Evidence from the backend source:
+- Consistent as a fact: there is no cache layer. settings.py defines no
+  CACHES, requirements.txt has no Redis or Memcached client, and no view uses
+  the cache API. Every queue read is recomputed.
+
+- What each read costs: the receiving and CTDO queues serialize every pending
+  application with all of its documents, unpaginated
+  (applications/views.py:501-503, :808-810). The payment and legal queues load
+  related rows per application.
+
+- Not shown to be the cause of anything: no queue query executed in this run.
+  Whether caching matters depends on queue sizes, and pagination plus
+  select_related would reduce the same cost without adding a service.
+
+- A cache would not help login. The cost of a working staff-login is the
+  password hash check, which is CPU-bound by design.
+
+- Separate defect, confirmed in isolation: the role check does not enforce
+  roles. HasRole reads required_role from the DRF view instance
+  (core/permissions.py:9), but the views assign it to the function object
+  inside the view body (for example applications/views.py:500), which the
+  instance never sees. Running this project's HasRole against a view written
+  the same way returned required_role = None and has_permission = True. Only
+  four legal views are also patched through .cls (legal/views.py:1602-1605).
+  If this holds end to end, any logged-in account, including an applicant,
+  passes the role check on the other staff endpoints. It could not be
+  confirmed against the running server because no login works.
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Create one staff account per role with `python manage.py create_user`
+  (Receiving Officer, CTDO, Financial Analyst, Cashier, Legal Officer, ORD,
+  Records Officer) and pass the usernames through STAFF_<ROLE>_USER, or use
+  the defaults in lib.js.
+
+- Seed applications at each workflow stage, at a realistic volume, so the
+  queues and reports have rows to read.
+
+- Re-run this script. By default the workflow POSTs target id 0 and change
+  nothing; run with -e MUTATE=1 against disposable data to push real cases
+  through the transition under load.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run staff-10-load.js
+  Environment: BASE_URL, STAFF_<ROLE>_USER, STAFF_PASS

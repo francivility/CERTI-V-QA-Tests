@@ -1,0 +1,190 @@
+==============================================================================
+CERTI-V QA - APPLICANT SIDE LOAD TEST DIAGNOSTIC REPORT
+applicant-06-load.js - Read-heavy load
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:15:00Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : 10 VUs constant for 30s
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED on error rate (83.36%), PASSED on latency (p95 129 ms against 1.5 s).
+No query degradation or queueing was observed. The five authenticated routes
+never executed a query.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                           REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+--------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/login/                 1     119.0     119.0     119.0  500 x1
+GET /accounts/account/              100      17.0      48.3     386.4  401 x100
+GET /applications/mine/             100      78.7     843.4     868.4  401 x100
+GET /applications/drafts/           100      13.0      21.4     391.8  401 x100
+GET /applications/notifications/    100       6.8      18.7     106.8  401 x100
+GET /payments/my-payments/          100      25.6     110.4     382.0  401 x100
+GET /cpc-types/                     100      91.0     142.4     173.5  200 x100
+TOTAL                               601
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<1500' p(95)=128.68ms
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=83.36%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 601    18.221355/s
+    checks_succeeded...: 16.63% 100 out of 601
+    checks_failed......: 83.36% 501 out of 601
+
+    ✗ POST /accounts/login/ -> 200
+      ↳  0% — ✓ 0 / ✗ 1
+    ✗ GET /accounts/account/ -> 200
+      ↳  0% — ✓ 0 / ✗ 100
+    ✗ GET /applications/mine/ -> 200
+      ↳  0% — ✓ 0 / ✗ 100
+    ✗ GET /applications/drafts/ -> 200
+      ↳  0% — ✓ 0 / ✗ 100
+    ✗ GET /applications/notifications/ -> 200
+      ↳  0% — ✓ 0 / ✗ 100
+    ✗ GET /payments/my-payments/ -> 200
+      ↳  0% — ✓ 0 / ✗ 100
+    ✓ GET /cpc-types/ -> 200
+
+    HTTP
+    http_req_duration..............: avg=38.81ms min=0s      med=5.19ms  max=868.37ms p(90)=98.74ms  p(95)=128.68ms
+      { expected_response:true }...: avg=90.98ms min=41.11ms med=83.15ms max=173.47ms p(90)=131.35ms p(95)=142.38ms
+    http_req_failed................: 83.36% 501 out of 601
+    http_reqs......................: 601    18.221355/s
+
+    EXECUTION
+    iteration_duration.............: avg=3.24s   min=3.08s   med=3.14s   max=4.02s    p(90)=3.51s    p(95)=3.95s
+    iterations.....................: 100    3.031839/s
+    vus............................: 9      min=9          max=10
+    vus_max........................: 10     min=10         max=10
+
+    NETWORK
+    data_received..................: 412 kB 13 kB/s
+    data_sent......................: 56 kB  1.7 kB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/login/ -> 500 (ProgrammingError: column
+      accounts_user.contact_no_2 does not exist)
+  GET /accounts/account/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+  GET /applications/mine/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+  GET /applications/drafts/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+  GET /applications/notifications/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /payments/my-payments/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=311.5 threads=43 cpu_s=410.4
+  after  : pid=6780 rss_mb=313.7 threads=42 cpu_s=418
+  GET /api/health/ after the run : 200 in 0.211533s
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+The setup login failed (500, missing column accounts_user.contact_no_2), so
+the five authenticated routes each returned 401 on all 100 hits:
+/accounts/account/, /applications/mine/, /applications/drafts/,
+/applications/notifications/ and /payments/my-payments/. A 401 is issued
+before any view code or SQL runs, so their latency figures do not describe
+read performance.
+
+GET /cpc-types/ is public and returned 200 on all 100 hits, with 91 ms average
+and 142 ms p95. That is the only real read measured, and it was against an
+empty table.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  Severe read query degradation and transaction queues piling up due to a
+  total lack of database indexes on core user tracking columns, forcing slow
+  full-table scans.
+
+Status: NOT OBSERVED and NOT MEASURABLE yet. "Total lack of indexes" is
+        contradicted by the models.
+
+Evidence from the backend source:
+- Contradicted: the six routes filter on foreign keys (applicant_profile,
+  user) and Django creates an index on every ForeignKey and OneToOneField
+  automatically. username is unique and therefore indexed.
+
+- Not measurable: most of the tables behind these routes do not exist in this
+  database, and the ones that do are empty. Index effects only show at
+  realistic row counts.
+
+- Columns that are filtered without an index, worth checking once data exists:
+  Application.status (scanned by mark_overdue_applications on every payments
+  read), Notification.is_read and Notification.title (counted on every
+  notifications read), and the case-insensitive email lookups (email__iexact),
+  which a plain b-tree index cannot serve.
+
+- To confirm or reject: seed a realistic volume, then run EXPLAIN ANALYZE on
+  the queries behind these routes and compare with this script's per-endpoint
+  latency.
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Seed reference data (CPC types, requirement types, routes, proprietorship
+  types) and create the test applicant used by lib.js (APPLICANT_USER /
+  APPLICANT_PASS).
+
+- Re-run this script. Only then does the result say anything about behaviour
+  under concurrency.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run applicant-06-load.js
+  Environment: BASE_URL, APPLICANT_USER, APPLICANT_PASS

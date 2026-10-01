@@ -1,0 +1,203 @@
+==============================================================================
+CERTI-V QA - TMS (STAFF) SIDE LOAD TEST DIAGNOSTIC REPORT
+staff-05-cashier.js - Cashier payment confirmation and receipts
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:29:22Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : ramp 0 -> 10 VUs (10s), 10 -> 20 VUs (20s), 20 -> 0 (5s); 35s total
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED. 3145 of 3145 requests failed, all on authentication. No payment was
+written, so no deadlock could occur, and none was observed.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                               REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+------------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/staff-login/               1      97.2      97.2      97.2  500 x1
+GET /payments/payment-queue/            393       4.9       9.1     316.1  401 x393
+POST /payments/receive-payment/<id>/    393       3.4       9.8      19.7  401 x393
+GET /payments/payment-history/          393       3.1      10.9      23.0  401 x393
+GET /payments/receipt/<id>/             393       3.8      11.8     309.9  401 x393
+GET /payments/receipt-document/<id>/    393       3.6      11.1     302.3  401 x393
+POST /payments/receipt-update/<id>/     393       3.7      11.4     311.8  401 x393
+POST /payments/send-receipt/<id>/       393       2.7      10.3      21.9  401 x393
+GET /payments/payment-reports/          393       2.6      11.4      20.4  401 x393
+TOTAL                                  3145
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<1500' p(95)=10.91ms
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=100.00%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 3145    87.984891/s
+    checks_succeeded...: 0.00%   0 out of 3145
+    checks_failed......: 100.00% 3145 out of 3145
+
+    ✗ POST /accounts/staff-login/ -> 200
+      ↳  0% — ✓ 0 / ✗ 1
+    ✗ GET /payments/payment-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 393
+    ✗ POST /payments/receive-payment/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 393
+    ✗ GET /payments/payment-history/ -> 200
+      ↳  0% — ✓ 0 / ✗ 393
+    ✗ GET /payments/receipt/<id>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 393
+    ✗ GET /payments/receipt-document/<id>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 393
+    ✗ POST /payments/receipt-update/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 393
+    ✗ POST /payments/send-receipt/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 393
+    ✗ GET /payments/payment-reports/ -> 200
+      ↳  0% — ✓ 0 / ✗ 393
+
+    HTTP
+    http_req_duration....: avg=3.52ms min=0s med=1.67ms max=316.12ms p(90)=7.25ms p(95)=10.91ms
+    http_req_failed......: 100.00% 3145 out of 3145
+    http_reqs............: 3145    87.984891/s
+
+    EXECUTION
+    iteration_duration...: avg=1.03s  min=1s med=1.01s  max=1.32s    p(90)=1.06s  p(95)=1.1s
+    iterations...........: 393     10.994614/s
+    vus..................: 3       min=1            max=20
+    vus_max..............: 20      min=20           max=20
+
+    NETWORK
+    data_received........: 1.5 MB  42 kB/s
+    data_sent............: 398 kB  11 kB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/staff-login/ -> 500 (ProgrammingError: column
+      accounts_user.contact_no_2 does not exist)
+  GET /payments/payment-queue/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  POST /payments/receive-payment/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /payments/payment-history/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  GET /payments/receipt/<id>/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  GET /payments/receipt-document/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /payments/receipt-update/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /payments/send-receipt/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /payments/payment-reports/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=319.7 threads=45 cpu_s=550.6
+  after  : pid=6780 rss_mb=319.6 threads=41 cpu_s=558.7
+  GET /api/health/ after the run : 200 in 0.212521s
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+The setup login failed (500, missing column accounts_user.contact_no_2). All
+eight endpoints require a token and returned 401 on each of the 393
+iterations, in about 3 to 5 ms. POST /payments/receive-payment/<id>/ never
+executed a write.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  Severe database deadlocks caused by concurrent cashier processing threads
+  attempting to write to and lock the global revenue ledger tables out of
+  order.
+
+Status: NOT OBSERVED and NOT EXERCISED. Contradicted by the code.
+
+Evidence from the backend source:
+- Contradicted: there is no revenue ledger table. The payment models are
+  StatementOfAccount, SOAItem and Payment (payments/models.py), and a payment
+  is one row per application.
+
+- Contradicted: receive_payment takes no explicit locks and does not run in a
+  transaction (payments/views.py:462-534). It writes one Payment row, one
+  status log and one notification, each committed on its own. With no multi-
+  row lock ordering there is no deadlock pattern.
+
+- The real concurrency risk is the opposite, a missing lock. Two cashiers
+  confirming the same application at once can both pass the "already paid"
+  check (views.py:475) before either saves. The later OR number overwrites the
+  earlier one, and two status logs and two applicant notifications are
+  written. or_number has no unique constraint (payments/models.py:52).
+
+- Related: payment_reports recomputes a SUM and four GROUP BY counts on every
+  request (payments/views.py:874-895), and receipt_document rebuilds the
+  receipt spreadsheet on every call (views.py:570).
+
+- To test the race: run this script with -e MUTATE=1 against a disposable
+  pending payment and count the status log rows afterwards.
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Create one staff account per role with `python manage.py create_user`
+  (Receiving Officer, CTDO, Financial Analyst, Cashier, Legal Officer, ORD,
+  Records Officer) and pass the usernames through STAFF_<ROLE>_USER, or use
+  the defaults in lib.js.
+
+- Seed applications at each workflow stage, at a realistic volume, so the
+  queues and reports have rows to read.
+
+- Re-run this script. By default the workflow POSTs target id 0 and change
+  nothing; run with -e MUTATE=1 against disposable data to push real cases
+  through the transition under load.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run staff-05-cashier.js
+  Environment: BASE_URL, STAFF_<ROLE>_USER, STAFF_PASS, PEAK_VUS, MUTATE

@@ -1,0 +1,217 @@
+==============================================================================
+CERTI-V QA - TMS (STAFF) SIDE LOAD TEST DIAGNOSTIC REPORT
+staff-08-approval.js - CTDO endorsement and ORD approval
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:31:26Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : ramp 0 -> 10 VUs (10s), 10 -> 20 VUs (20s), 20 -> 0 (5s); 35s total
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED. 4336 of 4336 requests failed, all on authentication. No signature was
+attached and no CPU bottleneck was observed (about 9 s of server CPU over the
+run). The backend contains no cryptographic signing.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                                    REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+-----------------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/staff-login/                    2      78.1      81.7      82.1  500 x2
+GET /legal/ctdo-endorsement-queue/           394       2.5       4.8       6.9  401 x394
+GET /legal/decision-for-endorsement/<id>/    394       2.5       4.8       8.2  401 x394
+POST /legal/attach-ctdo-signature/<id>/      394       2.0       4.0      13.1  401 x394
+POST /legal/endorse-decision/<id>/           394       1.8       3.9       9.0  401 x394
+GET /legal/ord-queue/                        394       1.7       4.3      10.7  401 x394
+GET /legal/decision-for-approval/<id>/       394       2.4       4.7     314.3  401 x394
+POST /legal/attach-ord-signature/<id>/       394       1.7       4.6      12.2  401 x394
+POST /legal/approve-decision/<id>/           394       2.4       4.8     305.0  401 x394
+GET /legal/ord-reports/                      394       1.6       5.1       8.4  401 x394
+GET /legal/ord-history/                      394       1.6       4.6       8.0  401 x394
+GET /legal/ord-schedule/                     394       1.6       4.9      14.0  401 x394
+TOTAL                                       4336
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<1500' p(95)=4.74ms
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=100.00%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 4336    121.285683/s
+    checks_succeeded...: 0.00%   0 out of 4336
+    checks_failed......: 100.00% 4336 out of 4336
+
+    ✗ POST /accounts/staff-login/ -> 200
+      ↳  0% — ✓ 0 / ✗ 2
+    ✗ GET /legal/ctdo-endorsement-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 394
+    ✗ GET /legal/decision-for-endorsement/<id>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 394
+    ✗ POST /legal/attach-ctdo-signature/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 394
+    ✗ POST /legal/endorse-decision/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 394
+    ✗ GET /legal/ord-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 394
+    ✗ GET /legal/decision-for-approval/<id>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 394
+    ✗ POST /legal/attach-ord-signature/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 394
+    ✗ POST /legal/approve-decision/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 394
+    ✗ GET /legal/ord-reports/ -> 200
+      ↳  0% — ✓ 0 / ✗ 394
+    ✗ GET /legal/ord-history/ -> 200
+      ↳  0% — ✓ 0 / ✗ 394
+    ✗ GET /legal/ord-schedule/ -> 200
+      ↳  0% — ✓ 0 / ✗ 394
+
+    HTTP
+    http_req_duration....: avg=2.01ms min=0s med=1.47ms max=314.3ms p(90)=3.42ms p(95)=4.74ms
+    http_req_failed......: 100.00% 4336 out of 4336
+    http_reqs............: 4336    121.285683/s
+
+    EXECUTION
+    iteration_duration...: avg=1.02s  min=1s med=1.01s  max=1.33s   p(90)=1.03s  p(95)=1.04s
+    iterations...........: 394     11.020885/s
+    vus..................: 5       min=1            max=20
+    vus_max..............: 20      min=20           max=20
+
+    NETWORK
+    data_received........: 2.2 MB  61 kB/s
+    data_sent............: 533 kB  15 kB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/staff-login/ -> 500 (ProgrammingError: column
+      accounts_user.contact_no_2 does not exist)
+  GET /legal/ctdo-endorsement-queue/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /legal/decision-for-endorsement/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /legal/attach-ctdo-signature/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /legal/endorse-decision/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /legal/ord-queue/ -> 401 ({"detail":"Authentication credentials were not
+      provided."})
+  GET /legal/decision-for-approval/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /legal/attach-ord-signature/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /legal/approve-decision/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /legal/ord-reports/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+  GET /legal/ord-history/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+  GET /legal/ord-schedule/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=325.5 threads=41 cpu_s=593.6
+  after  : pid=6780 rss_mb=325.6 threads=41 cpu_s=602.6
+  GET /api/health/ after the run : 200 in 0.218561s
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+Both setup logins failed (CTDO and ORD; 500, missing column
+accounts_user.contact_no_2). All eleven endpoints require a token and returned
+401 on each of the 394 iterations, in about 2 ms.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  Severe CPU bottlenecking within the backend thread execution engine due to
+  processing heavy cryptographic digital certificate signing algorithms
+  directly on the synchronous response path.
+
+Status: NOT OBSERVED and NOT EXERCISED. Contradicted by the code.
+
+Evidence from the backend source:
+- Contradicted: nothing in the backend signs with a certificate.
+  requirements.txt has no signing library (cryptography, pyHanko, endesive and
+  pyOpenSSL were searched for) and the code has no x509 or PKCS usage.
+
+- What "attach signature" does: after a password check it pastes the officer's
+  stored PNG into the Decision DOCX and converts the result to PDF
+  (legal/views.py:1188-1189 for CTDO, :1296-1297 for ORD). approve_decision
+  rebuilds and converts the document again (:1332).
+
+- Consistent in part: that work is synchronous on the request thread, and the
+  conversion goes through Microsoft Word (legal/document_generation.py:555),
+  which is slow and effectively serial. Concurrent approvals would queue
+  behind it. The bottleneck would be Word, not a signing algorithm.
+
+- Worth stating plainly in the project record: the e-signature is an image
+  stamp gated by a password, not a digital signature. The PDF carries no
+  cryptographic proof of who signed it.
+
+- These four views are the ones whose role restriction is correctly applied
+  (legal/views.py:1602-1605).
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Create one staff account per role with `python manage.py create_user`
+  (Receiving Officer, CTDO, Financial Analyst, Cashier, Legal Officer, ORD,
+  Records Officer) and pass the usernames through STAFF_<ROLE>_USER, or use
+  the defaults in lib.js.
+
+- Seed applications at each workflow stage, at a realistic volume, so the
+  queues and reports have rows to read.
+
+- Re-run this script. By default the workflow POSTs target id 0 and change
+  nothing; run with -e MUTATE=1 against disposable data to push real cases
+  through the transition under load.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run staff-08-approval.js
+  Environment: BASE_URL, STAFF_<ROLE>_USER, STAFF_PASS, PEAK_VUS, MUTATE

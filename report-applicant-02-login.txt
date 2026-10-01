@@ -1,0 +1,197 @@
+==============================================================================
+CERTI-V QA - APPLICANT SIDE LOAD TEST DIAGNOSTIC REPORT
+applicant-02-login.js - Login and account management
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:12:14Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : ramp 0 -> 10 VUs (10s), 10 -> 20 VUs (20s), 20 -> 0 (5s); 35s total
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED. 0 of 182 logins succeeded. The server did not crash and no lock
+contention was observed; login fails on a missing database column.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                                  REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+---------------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/login/                      182     932.7    1740.8    1844.6  500 x182
+GET /accounts/account/                     182     112.1     384.6    1208.6  401 x182
+GET /accounts/notification-preferences/    182      54.8     176.2     554.1  401 x182
+POST /accounts/change-username/            182      36.3      76.0     363.0  401 x182
+POST /accounts/change-password/            182      33.3      86.4     163.2  401 x182
+POST /accounts/token/refresh/              182      34.2      72.3     275.3  400 x182
+POST /accounts/delete-account/             182      35.3      88.0     390.0  401 x182
+POST /accounts/google/                     182      25.4      53.7     511.5  400 x182
+TOTAL                                     1456
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<1500' p(95)=1.07s
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=87.50%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 1456   40.87656/s
+    checks_succeeded...: 12.50% 182 out of 1456
+    checks_failed......: 87.50% 1274 out of 1456
+
+    ✗ POST /accounts/login/ -> 200
+      ↳  0% — ✓ 0 / ✗ 182
+    ✗ GET /accounts/account/ -> 200
+      ↳  0% — ✓ 0 / ✗ 182
+    ✗ GET /accounts/notification-preferences/ -> 200
+      ↳  0% — ✓ 0 / ✗ 182
+    ✗ POST /accounts/change-username/ -> 200
+      ↳  0% — ✓ 0 / ✗ 182
+    ✗ POST /accounts/change-password/ -> 400
+      ↳  0% — ✓ 0 / ✗ 182
+    ✗ POST /accounts/token/refresh/ -> 200
+      ↳  0% — ✓ 0 / ✗ 182
+    ✗ POST /accounts/delete-account/ -> 400
+      ↳  0% — ✓ 0 / ✗ 182
+    ✓ POST /accounts/google/ -> 400|401
+
+    HTTP
+    http_req_duration..............: avg=157.99ms min=0s    med=30.76ms max=1.84s    p(90)=480.56ms p(95)=1.07s
+      { expected_response:true }...: avg=25.35ms  min=0s    med=17.71ms max=511.52ms p(90)=37.63ms  p(95)=53.74ms
+    http_req_failed................: 87.50% 1274 out of 1456
+    http_reqs......................: 1456   40.87656/s
+
+    EXECUTION
+    iteration_duration.............: avg=2.27s    min=1.13s med=2.34s   max=3.14s    p(90)=3.1s     p(95)=3.12s
+    iterations.....................: 182    5.10957/s
+    vus............................: 4      min=1            max=20
+    vus_max........................: 20     min=20           max=20
+
+    NETWORK
+    data_received..................: 31 MB  871 kB/s
+    data_sent......................: 252 kB 7.1 kB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/login/ -> 500 (ProgrammingError: column
+      accounts_user.contact_no_2 does not exist)
+  GET /accounts/account/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+  GET /accounts/notification-preferences/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /accounts/change-username/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /accounts/change-password/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /accounts/token/refresh/ -> 400 ({"refresh":["This field may not be
+      null."]})
+  POST /accounts/delete-account/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=371.9 threads=41 cpu_s=266.8
+  after  : pid=6780 rss_mb=372.2 threads=42 cpu_s=289
+  GET /api/health/ after the run : 200 in 0.216652s
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+POST /accounts/login/ returned 500 on all 182 attempts: "ProgrammingError:
+column accounts_user.contact_no_2 does not exist". The User model has a
+contact_no_2 field (migration accounts.0012, unapplied), so the very first
+SELECT against accounts_user is rejected. The failure is identical for a
+username that does not exist, so it is independent of the test account.
+
+With no access token, the five authenticated endpoints answered 401, and token
+refresh answered 400 ("refresh: This field may not be null") because there was
+no refresh token to send. These are consequences of the login failure. POST
+/accounts/google/ answered 400 as expected (Google sign-in is not configured),
+which is the only genuine pass.
+
+Failing logins averaged 933 ms (p95 1.74 s) at 20 VUs against about 100 ms at
+1 VU, most likely the cost of rendering the DEBUG traceback page on every
+request.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  Exclusive database table write-locks caused by cascading delete operations
+  across deep foreign key mappings during account deletion, blocking all
+  concurrent authentication tokens.
+
+Status: NOT OBSERVED and NOT EXERCISED. The code does not support the stated
+        mechanism.
+
+Evidence from the backend source:
+- Not exercised: this script sends delete-account with a deliberately wrong
+  password. All VUs share one test account, and new accounts cannot be created
+  through the API without passing face/ID verification, so a real delete would
+  remove the account every other VU is using.
+
+- Contradicted: delete_account calls user.delete() (accounts/views.py:1059).
+  PostgreSQL DELETE takes row-level locks, not exclusive table locks, and
+  login is a plain SELECT that row locks do not block.
+
+- Separate defect found by reading the code: Application.applicant_profile is
+  on_delete=PROTECT (applications/models.py:46). Deleting an account that has
+  any application raises ProtectedError, which the view does not catch, so the
+  expected result is a 500, not a cascade. The view's docstring ("Cascades to
+  the applicant's applications") is wrong. This was not executed and should be
+  confirmed with a disposable account.
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Seed reference data (CPC types, requirement types, routes, proprietorship
+  types) and create the test applicant used by lib.js (APPLICANT_USER /
+  APPLICANT_PASS).
+
+- Re-run this script. Only then does the result say anything about behaviour
+  under concurrency.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run applicant-02-login.js
+  Environment: BASE_URL, APPLICANT_USER, APPLICANT_PASS, PEAK_VUS

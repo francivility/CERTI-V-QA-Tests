@@ -1,0 +1,199 @@
+==============================================================================
+CERTI-V QA - APPLICANT SIDE LOAD TEST DIAGNOSTIC REPORT
+applicant-01-register.js - Registration flow
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:11:34Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : ramp 0 -> 10 VUs (10s), 10 -> 20 VUs (20s), 20 -> 0 (5s); 35s total
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED. 0 of 176 registrations could be staged. The server did not crash and
+no thread starvation or SMTP stall was observed; the flow fails at its first
+SQL statement because of a missing database column.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                                       REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+--------------------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/register/step1/                  176     988.5    2019.0    2169.7  500 x176
+POST /accounts/register/verify-email/           176      97.7     396.3     808.7  403 x176
+POST /accounts/register/resend-email/           176      56.4     180.4     576.9  403 x176
+POST /accounts/register/step2/                  176      42.4     106.4     544.0  403 x176
+GET /accounts/register/state/                   176      38.9      89.7     348.0  403 x176
+GET /accounts/register/verify/status/<code>/    528      35.7      88.3     495.7  404 x528
+POST /accounts/register/abandon/                176      33.2      87.2     536.0  403 x176
+TOTAL                                          1584
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<1500' p(95)=1.08s
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=88.88%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 1584   44.907174/s
+    checks_succeeded...: 11.11% 176 out of 1584
+    checks_failed......: 88.88% 1408 out of 1584
+
+    ✗ POST /accounts/register/step1/ -> 201
+      ↳  0% — ✓ 0 / ✗ 176
+    ✗ POST /accounts/register/verify-email/ -> 400
+      ↳  0% — ✓ 0 / ✗ 176
+    ✗ POST /accounts/register/resend-email/ -> 200|429
+      ↳  0% — ✓ 0 / ✗ 176
+    ✓ POST /accounts/register/step2/ -> 403
+    ✗ GET /accounts/register/state/ -> 200
+      ↳  0% — ✓ 0 / ✗ 176
+    ✗ GET /accounts/register/verify/status/<code>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 528
+    ✗ POST /accounts/register/abandon/ -> 204
+      ↳  0% — ✓ 0 / ✗ 176
+
+    HTTP
+    http_req_duration..............: avg=151.57ms min=0s    med=38.03ms max=2.16s p(90)=310.6ms p(95)=1.08s
+      { expected_response:true }...: avg=42.36ms  min=0s    med=34.11ms max=544ms p(90)=73.87ms p(95)=106.37ms
+    http_req_failed................: 88.88% 1408 out of 1584
+    http_reqs......................: 1584   44.907174/s
+
+    EXECUTION
+    iteration_duration.............: avg=2.37s    min=1.15s med=2.61s   max=3.64s p(90)=3.09s   p(95)=3.55s
+    iterations.....................: 176    4.989686/s
+    vus............................: 6      min=1            max=19
+    vus_max........................: 20     min=20           max=20
+
+    NETWORK
+    data_received..................: 32 MB  910 kB/s
+    data_sent......................: 265 kB 7.5 kB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/register/step1/ -> 500 (ProgrammingError: column
+      accounts_pendingregistration.email_verified does not exist)
+  POST /accounts/register/verify-email/ -> 403 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /accounts/register/resend-email/ -> 403 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /accounts/register/state/ -> 403 ({"detail":"Authentication credentials
+      were not provided."})
+  GET /accounts/register/verify/status/<code>/ -> 404 ({"error":"Registration
+      not found"})
+  POST /accounts/register/abandon/ -> 403 ({"detail":"Authentication
+      credentials were not provided."})
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=353.2 threads=41 cpu_s=244.5
+  after  : pid=6780 rss_mb=371.9 threads=41 cpu_s=266.5
+  GET /api/health/ after the run : 200 in 0.222366s
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+POST /accounts/register/step1/ returned 500 on all 176 attempts:
+"ProgrammingError: column accounts_pendingregistration.email_verified does not
+exist". The view fails while looking up an existing pending registration for
+the email (accounts/views.py:142), which is before the password is hashed
+(line 186) and before any email is sent. Password hashing and mail delivery
+therefore never executed in this run.
+
+Everything after step1 failed as a consequence, not independently: with no
+staging token the four token-protected endpoints answered 403 ("Authentication
+credentials were not provided"), and the status poll answered 404
+("Registration not found") for the placeholder code. The one passing check
+(step2 -> 403) passed for the wrong reason: it expects 403 for an unverified
+email and received 403 for a missing token.
+
+The failing step1 calls averaged 989 ms (p95 2.0 s). A comparable 500 (login)
+took about 100 ms at 1 VU. With DEBUG=True each 500 renders a full Django
+traceback page (167 KB measured for the login error), which is the likely
+source of that latency; it is not evidence of how a working step1 would
+perform.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  CPU thread starvation due to heavy password hashing (bcrypt/argon2)
+  executing on the main worker threads, combined with hanging connection loops
+  waiting for synchronous SMTP email server handshakes.
+
+Status: NOT OBSERVED in this run. Partly consistent with the code, partly
+        contradicted.
+
+Evidence from the backend source:
+- Contradicted: the hasher is not bcrypt or argon2. settings.py defines no
+  PASSWORD_HASHERS and neither library is in requirements.txt, so Django's
+  default PBKDF2-SHA256 is used.
+
+- Consistent: hashing is synchronous on the request thread, and step1 hashes
+  twice (the password at accounts/views.py:186 and the 6-digit email code at
+  accounts/email_verification.py:22).
+
+- Consistent: send_mail() is called inline in the request
+  (email_verification.py:32) with EMAIL_TIMEOUT = 15 s, so a slow SMTP server
+  would hold the request for up to 15 s.
+
+- Qualifier: the default EMAIL_BACKEND is the console backend
+  (settings.py:183), which performs no SMTP handshake. The stall can only
+  happen where an SMTP backend is configured through the environment.
+
+- Not measured: none of this code ran, because step1 failed earlier.
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Seed reference data (CPC types, requirement types, routes, proprietorship
+  types) and create the test applicant used by lib.js (APPLICANT_USER /
+  APPLICANT_PASS).
+
+- Re-run this script. Only then does the result say anything about behaviour
+  under concurrency.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run applicant-01-register.js
+  Environment: BASE_URL, APPLICANT_USER, APPLICANT_PASS, PEAK_VUS

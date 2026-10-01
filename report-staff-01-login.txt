@@ -1,0 +1,198 @@
+==============================================================================
+CERTI-V QA - TMS (STAFF) SIDE LOAD TEST DIAGNOSTIC REPORT
+staff-01-login.js - Staff login, account and e-signature metadata
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:26:45Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : ramp 0 -> 10 VUs (10s), 10 -> 20 VUs (20s), 20 -> 0 (5s); 35s total
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED. 0 of 280 staff logins succeeded. The server did not crash, and no
+signature data was transferred at all: the e-signature endpoint answered 401
+in about 10 ms. Login fails on a missing database column.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                                       REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+--------------------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/staff-login/                     280     340.0     919.1    1082.4  500 x280
+POST /accounts/staff-google/                    280      33.6     129.7     511.3  400 x5, 429 x275
+POST /accounts/token/refresh/                   280      16.1      48.2     185.5  400 x280
+GET /accounts/staff-account/                    280      15.1      41.3     429.8  401 x280
+POST /accounts/staff-verify-email/              280      13.5      31.0     220.2  401 x280
+POST /accounts/staff-password-reset/request/    280      13.5      29.5     229.8  429 x275, 500 x5
+POST /accounts/staff-password-reset/confirm/    280      10.8      26.1      60.2  400 x10, 429 x270
+GET /accounts/esignature/                       280       9.9      28.3     219.7  401 x280
+TOTAL                                          2240
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<1500' p(95)=279.2ms
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=50.22%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 2240   63.937523/s
+    checks_succeeded...: 49.77% 1115 out of 2240
+    checks_failed......: 50.22% 1125 out of 2240
+
+    ✗ POST /accounts/staff-login/ -> 200
+      ↳  0% — ✓ 0 / ✗ 280
+    ✓ POST /accounts/staff-google/ -> 400|401|429
+    ✗ POST /accounts/token/refresh/ -> 200
+      ↳  0% — ✓ 0 / ✗ 280
+    ✗ GET /accounts/staff-account/ -> 200
+      ↳  0% — ✓ 0 / ✗ 280
+    ✓ POST /accounts/staff-verify-email/ -> 400|401
+    ✗ POST /accounts/staff-password-reset/request/ -> 200|429
+      ↳  98% — ✓ 275 / ✗ 5
+    ✓ POST /accounts/staff-password-reset/confirm/ -> 400|429
+    ✗ GET /accounts/esignature/ -> 200
+      ↳  0% — ✓ 0 / ✗ 280
+
+    HTTP
+    http_req_duration..............: avg=56.56ms min=0s    med=9.16ms max=1.08s    p(90)=129.76ms p(95)=279.2ms
+      { expected_response:true }...: avg=17.48ms min=0s    med=6.91ms max=511.34ms p(90)=33.27ms  p(95)=54.31ms
+    http_req_failed................: 50.22% 1125 out of 2240
+    http_reqs......................: 2240   63.937523/s
+
+    EXECUTION
+    iteration_duration.............: avg=1.45s   min=1.08s med=1.26s  max=2.24s    p(90)=2.04s    p(95)=2.17s
+    iterations.....................: 280    7.99219/s
+    vus............................: 5      min=1            max=20
+    vus_max........................: 20     min=20           max=20
+
+    NETWORK
+    data_received..................: 50 MB  1.4 MB/s
+    data_sent......................: 390 kB 11 kB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/staff-login/ -> 500 (ProgrammingError: column
+      accounts_user.contact_no_2 does not exist)
+  POST /accounts/token/refresh/ -> 400 ({"refresh":["This field may not be
+      null."]})
+  GET /accounts/staff-account/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  POST /accounts/staff-password-reset/request/ -> 500 (ProgrammingError:
+      column accounts_user.contact_no_2 does not exist)
+  GET /accounts/esignature/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=308.6 threads=41 cpu_s=502.2
+  after  : pid=6780 rss_mb=320.4 threads=41 cpu_s=525
+  GET /api/health/ after the run : 200 in 0.207501s
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+POST /accounts/staff-login/ returned 500 on all 280 attempts:
+"ProgrammingError: column accounts_user.contact_no_2 does not exist". It is
+the same failure as the applicant login and happens for any username. Failing
+logins averaged 340 ms (p95 919 ms).
+
+With no token, staff-account, staff-verify-email and esignature answered 401,
+and token refresh answered 400 because there was no refresh token.
+
+Three endpoints are rate limited per IP and behaved as designed. staff-google
+returned 400 five times ("not configured") and then 429 for the remaining 275
+(limit 5/hour). staff-password-reset/confirm returned 400 ten times and then
+429 (limit 10/hour). These are the only genuine passes. staff-password-
+reset/request returned 500 on its first five calls, on the same missing
+column, and 429 afterwards.
+
+Side effect of this run: those limits are now used up for an hour from this
+machine, and the "anon" limit is shared with the applicant password reset.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  Network bandwidth choking and database driver delays caused by fetching and
+  converting large binary data strings (BLOB fields) for electronic signatures
+  directly out of primary user rows instead of object storage links.
+
+Status: NOT OBSERVED. Contradicted by the code.
+
+Evidence from the backend source:
+- Contradicted: User.esignature is an ImageField with upload_to='esignatures/'
+  (accounts/models.py:15). The image is a file under MEDIA_ROOT and the user
+  row stores only its path. There is no BLOB column on the user table.
+
+- Contradicted: GET /accounts/esignature/ returns metadata and a URL
+  (has_esignature, name, uploaded_at, esignature_url;
+  accounts/views.py:1180-1185). No image bytes pass through this endpoint or
+  through the database driver.
+
+- Not exercised: the endpoint answered 401 on every call.
+
+- Real cost on this path once login works: the password hash check runs
+  synchronously on every staff-login, and uploads are served by Django itself
+  from /media/ (certiv_backend/urls.py), not by a web server or object
+  storage.
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Create one staff account per role with `python manage.py create_user`
+  (Receiving Officer, CTDO, Financial Analyst, Cashier, Legal Officer, ORD,
+  Records Officer) and pass the usernames through STAFF_<ROLE>_USER, or use
+  the defaults in lib.js.
+
+- Seed applications at each workflow stage, at a realistic volume, so the
+  queues and reports have rows to read.
+
+- Re-run this script. By default the workflow POSTs target id 0 and change
+  nothing; run with -e MUTATE=1 against disposable data to push real cases
+  through the transition under load.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run staff-01-login.js
+  Environment: BASE_URL, STAFF_<ROLE>_USER, STAFF_PASS, PEAK_VUS, MUTATE

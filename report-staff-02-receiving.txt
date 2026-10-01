@@ -1,0 +1,215 @@
+==============================================================================
+CERTI-V QA - TMS (STAFF) SIDE LOAD TEST DIAGNOSTIC REPORT
+staff-02-receiving.js - Receiving Officer queue, review and case search
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:27:24Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : ramp 0 -> 10 VUs (10s), 10 -> 20 VUs (20s), 20 -> 0 (5s); 35s total
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED. 3169 of 3169 requests failed, all on authentication. No search query
+reached the database, so no lockup or memory spike could occur: the server
+answered in about 2 ms and its memory did not move.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                                       REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+--------------------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/staff-login/                       1     103.0     103.0     103.0  500 x1
+GET /applications/receiving-queue/              396       2.3       3.9      51.7  401 x396
+GET /applications/<id>/detail/                  396       2.6       3.9     171.1  401 x396
+POST /applications/review-document/<doc_id>/    396       1.7       3.4       8.7  401 x396
+POST /applications/<id>/forward-to-ctdo/        396       1.7       3.7       8.9  401 x396
+POST /applications/<id>/submit-for-review/      396       1.5       3.7      10.2  401 x396
+GET /applications/application-history/          396       1.4       3.0       8.5  401 x396
+GET /applications/reports/                      396       1.5       3.6       9.2  401 x396
+GET /applications/case-search/                  396       1.5       4.0       8.6  401 x396
+TOTAL                                          3169
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<1500' p(95)=3.75ms
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=100.00%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 3169    88.789138/s
+    checks_succeeded...: 0.00%   0 out of 3169
+    checks_failed......: 100.00% 3169 out of 3169
+
+    ✗ POST /accounts/staff-login/ -> 200
+      ↳  0% — ✓ 0 / ✗ 1
+    ✗ GET /applications/receiving-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 396
+    ✗ GET /applications/<id>/detail/ -> 200
+      ↳  0% — ✓ 0 / ✗ 396
+    ✗ POST /applications/review-document/<doc_id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 396
+    ✗ POST /applications/<id>/forward-to-ctdo/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 396
+    ✗ POST /applications/<id>/submit-for-review/ -> 400
+      ↳  0% — ✓ 0 / ✗ 396
+    ✗ GET /applications/application-history/ -> 200
+      ↳  0% — ✓ 0 / ✗ 396
+    ✗ GET /applications/reports/ -> 200
+      ↳  0% — ✓ 0 / ✗ 396
+    ✗ GET /applications/case-search/ -> 200
+      ↳  0% — ✓ 0 / ✗ 396
+
+    HTTP
+    http_req_duration....: avg=1.8ms min=0s med=1.5ms max=171.14ms p(90)=2.94ms p(95)=3.75ms
+    http_req_failed......: 100.00% 3169 out of 3169
+    http_reqs............: 3169    88.789138/s
+
+    EXECUTION
+    iteration_duration...: avg=1.01s min=1s med=1.01s max=1.18s    p(90)=1.02s  p(95)=1.02s
+    iterations...........: 396     11.09514/s
+    vus..................: 2       min=1            max=20
+    vus_max..............: 20      min=20           max=20
+
+    NETWORK
+    data_received........: 1.5 MB  43 kB/s
+    data_sent............: 400 kB  11 kB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/staff-login/ -> 500 (ProgrammingError: column
+      accounts_user.contact_no_2 does not exist)
+  GET /applications/receiving-queue/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /applications/<id>/detail/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  POST /applications/review-document/<doc_id>/ -> 401
+      ({"detail":"Authentication credentials were not provided."})
+  POST /applications/<id>/forward-to-ctdo/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /applications/<id>/submit-for-review/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /applications/application-history/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /applications/reports/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  GET /applications/case-search/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=320.4 threads=41 cpu_s=525.2
+  after  : pid=6780 rss_mb=319.6 threads=41 cpu_s=533.6
+  GET /api/health/ after the run : 200 in 0.217288s
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+The setup login failed (500, missing column accounts_user.contact_no_2). All
+eight endpoints require a token, so each of the 396 iterations received 401 on
+every call, including case-search. A 401 is issued before any view code or SQL
+runs, so the 1.5 to 2.6 ms averages describe the authentication layer only.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  Database lockups and memory utilization spikes caused by complex, unindexed
+  text matching searches (LIKE %term%) running simultaneously across millions
+  of relational rows.
+
+Status: NOT OBSERVED and NOT MEASURABLE yet. The query shape is as described;
+        the consequences are not supported.
+
+Evidence from the backend source:
+- Consistent: case_search filters with icontains on case_number, docket_number
+  and the applicant's business_name (applications/views.py:726-730). That is
+  ILIKE '%term%', which an ordinary index cannot serve, so each search scans
+  the table.
+
+- Consistent: each result row then triggers further lookups for the applicant
+  profile, CPC type, release and decision (views.py:738-746), up to 50 rows
+  per search.
+
+- Contradicted: a SELECT does not lock other readers or writers in PostgreSQL,
+  so slow searches would raise latency and CPU, not cause lockups. Results are
+  capped at 50, which bounds memory.
+
+- Not measurable: the applications table does not exist in this database.
+  "Millions of rows" is an assumption about volume, not something this run can
+  show.
+
+- Separate defect from reading the code: forward_to_ctdo sets any application
+  to pending_ctdo without checking its current status
+  (applications/views.py:534-545).
+
+- Separate defect, confirmed in isolation: the role check does not enforce
+  roles. HasRole reads required_role from the DRF view instance
+  (core/permissions.py:9), but the views assign it to the function object
+  inside the view body (for example applications/views.py:500), which the
+  instance never sees. Running this project's HasRole against a view written
+  the same way returned required_role = None and has_permission = True. Only
+  four legal views are also patched through .cls (legal/views.py:1602-1605).
+  If this holds end to end, any logged-in account, including an applicant,
+  passes the role check on the other staff endpoints. It could not be
+  confirmed against the running server because no login works.
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Create one staff account per role with `python manage.py create_user`
+  (Receiving Officer, CTDO, Financial Analyst, Cashier, Legal Officer, ORD,
+  Records Officer) and pass the usernames through STAFF_<ROLE>_USER, or use
+  the defaults in lib.js.
+
+- Seed applications at each workflow stage, at a realistic volume, so the
+  queues and reports have rows to read.
+
+- Re-run this script. By default the workflow POSTs target id 0 and change
+  nothing; run with -e MUTATE=1 against disposable data to push real cases
+  through the transition under load.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run staff-02-receiving.js
+  Environment: BASE_URL, STAFF_<ROLE>_USER, STAFF_PASS, PEAK_VUS, MUTATE

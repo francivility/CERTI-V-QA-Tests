@@ -1,0 +1,219 @@
+==============================================================================
+CERTI-V QA - TMS (STAFF) SIDE LOAD TEST DIAGNOSTIC REPORT
+staff-04-assessment.js - Financial Analyst assessment, SOA and Payment Order Slip
+==============================================================================
+
+Run started (UTC) : 2026-10-01T17:28:42Z
+Tool              : Grafana k6 v2.2.0 (windows/amd64)
+Target            : http://localhost:8000/api (Django runserver, DEBUG=True,
+                    PostgreSQL), backend checkout CERTI-V-Latest-Oct.1
+Load profile      : ramp 0 -> 10 VUs (10s), 10 -> 20 VUs (20s), 20 -> 0 (5s); 35s total
+Thresholds        : http_req_duration p(95) < 1500 ms, http_req_failed < 5%
+k6 exit code      : 99 (99 = one or more thresholds crossed)
+
+------------------------------------------------------------------------------
+1. VERDICT
+------------------------------------------------------------------------------
+FAILED. 4302 of 4302 requests failed, all on authentication. No document was
+generated. Of the ten staff hypotheses this is the one the code supports most,
+but this run does not demonstrate it.
+
+------------------------------------------------------------------------------
+2. PER-ENDPOINT RESULTS
+------------------------------------------------------------------------------
+ENDPOINT                                  REQS    AVG ms    P95 ms    MAX ms  STATUS CODES
+---------------------------------------  -----  --------  --------  --------  ------------------------
+POST /accounts/staff-login/                  1      78.7      78.7      78.7  500 x1
+GET /payments/assessment-queue/            391       2.8       6.1      11.8  401 x391
+GET /payments/fees/                        391       3.0       7.3      11.8  401 x391
+POST /payments/issue-soa/<id>/             391       2.8       8.6      12.7  401 x391
+POST /payments/forward-to-cashier/<id>/    391       2.7       8.6      14.8  401 x391
+GET /payments/assessment-history/          391       2.8       9.7      13.5  401 x391
+GET /payments/soa/<id>/                    391       2.7       9.2      13.2  401 x391
+GET /payments/pos-document/<id>/           391       2.6       8.8      13.8  401 x391
+POST /payments/send-pos/<id>/              391       2.5       8.7      15.3  401 x391
+GET /payments/assessment-reports/          391       2.7      10.1      15.6  401 x391
+GET /payments/overdue-queue/               391       2.6       8.8      14.8  401 x391
+POST /payments/<id>/confirm-expire/        391       2.2       7.7      12.6  401 x391
+TOTAL                                     4302
+
+------------------------------------------------------------------------------
+3. K6 SUMMARY
+------------------------------------------------------------------------------
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<1500' p(95)=8.75ms
+
+    http_req_failed
+    ✗ 'rate<0.05' rate=100.00%
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 4302    119.104415/s
+    checks_succeeded...: 0.00%   0 out of 4302
+    checks_failed......: 100.00% 4302 out of 4302
+
+    ✗ POST /accounts/staff-login/ -> 200
+      ↳  0% — ✓ 0 / ✗ 1
+    ✗ GET /payments/assessment-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 391
+    ✗ GET /payments/fees/ -> 200
+      ↳  0% — ✓ 0 / ✗ 391
+    ✗ POST /payments/issue-soa/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 391
+    ✗ POST /payments/forward-to-cashier/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 391
+    ✗ GET /payments/assessment-history/ -> 200
+      ↳  0% — ✓ 0 / ✗ 391
+    ✗ GET /payments/soa/<id>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 391
+    ✗ GET /payments/pos-document/<id>/ -> 200
+      ↳  0% — ✓ 0 / ✗ 391
+    ✗ POST /payments/send-pos/<id>/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 391
+    ✗ GET /payments/assessment-reports/ -> 200
+      ↳  0% — ✓ 0 / ✗ 391
+    ✗ GET /payments/overdue-queue/ -> 200
+      ↳  0% — ✓ 0 / ✗ 391
+    ✗ POST /payments/<id>/confirm-expire/ -> 400|404
+      ↳  0% — ✓ 0 / ✗ 391
+
+    HTTP
+    http_req_duration....: avg=2.68ms min=0s med=1.57ms max=78.66ms p(90)=6.81ms p(95)=8.75ms
+    http_req_failed......: 100.00% 4302 out of 4302
+    http_reqs............: 4302    119.104415/s
+
+    EXECUTION
+    iteration_duration...: avg=1.03s  min=1s med=1.01s  max=1.1s    p(90)=1.07s  p(95)=1.08s
+    iterations...........: 391     10.825157/s
+    vus..................: 1       min=1            max=20
+    vus_max..............: 20      min=20           max=20
+
+    NETWORK
+    data_received........: 2.0 MB  55 kB/s
+    data_sent............: 508 kB  14 kB/s
+
+------------------------------------------------------------------------------
+4. ERRORS LOGGED BY THE SCRIPT (first VU, one line per distinct failure)
+------------------------------------------------------------------------------
+  POST /accounts/staff-login/ -> 500 (ProgrammingError: column
+      accounts_user.contact_no_2 does not exist)
+  GET /payments/assessment-queue/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /payments/fees/ -> 401 ({"detail":"Authentication credentials were not
+      provided."})
+  POST /payments/issue-soa/<id>/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  POST /payments/forward-to-cashier/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /payments/assessment-history/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /payments/soa/<id>/ -> 401 ({"detail":"Authentication credentials were
+      not provided."})
+  GET /payments/pos-document/<id>/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  POST /payments/send-pos/<id>/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  GET /payments/assessment-reports/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+  GET /payments/overdue-queue/ -> 401 ({"detail":"Authentication credentials
+      were not provided."})
+  POST /payments/<id>/confirm-expire/ -> 401 ({"detail":"Authentication
+      credentials were not provided."})
+
+------------------------------------------------------------------------------
+5. SERVER PROCESS DURING THE RUN
+------------------------------------------------------------------------------
+  before : pid=6780 rss_mb=319.7 threads=45 cpu_s=541.5
+  after  : pid=6780 rss_mb=319.7 threads=45 cpu_s=550.5
+  GET /api/health/ after the run : 200 in 0.215000s
+
+------------------------------------------------------------------------------
+6. FAILURE NARRATIVE - WHAT ACTUALLY FAILED
+------------------------------------------------------------------------------
+The setup login failed (500, missing column accounts_user.contact_no_2). All
+eleven endpoints require a token and returned 401 on each of the 391
+iterations, in about 3 ms. GET /payments/pos-document/<id>/, the document
+endpoint, never reached its generator.
+
+------------------------------------------------------------------------------
+7. ROOT CAUSE OBSERVED IN THIS RUN
+------------------------------------------------------------------------------
+The database behind the running server is far behind the code. Read-only check
+(`python manage.py showmigrations`, run against the same backend checkout the
+server on :8000 was started from):
+
+  app            applied / total
+  accounts          2 / 12
+  core              1 / 6
+  applications      0 / 16
+  payments          0 / 9
+  legal             0 / 9
+  records           0 / 1
+  verification      0 / 1
+  sessions, admin   0 / 4
+
+That is 3 of 54 project migrations applied. Tables and columns the current
+models expect do not exist, so PostgreSQL rejects the queries and Django
+answers 500 (ProgrammingError). This is a deployment/setup defect, not a
+capacity limit: the same 500s were reproduced with a single curl request
+before any load was applied.
+
+------------------------------------------------------------------------------
+8. HYPOTHESIS UNDER TEST (from the test brief)
+------------------------------------------------------------------------------
+  Server resource starvation and worker lockups due to concurrent multi-
+  analyst requests compiling extensive transaction tables into live layout
+  documents.
+
+Status: NOT OBSERVED and NOT EXERCISED. Plausible from the code, with a
+        different mechanism than stated.
+
+Evidence from the backend source:
+- Consistent: pos_document builds the Payment Order Slip as DOCX and converts
+  it to PDF on every GET, with no stored copy reused
+  (payments/views.py:334-341). send_pos does the same
+  (payments/views.py:375-376).
+
+- The expensive step is the conversion, not the data. convert_to_pdf drives
+  Microsoft Word through COM via docx2pdf, writing temp files and retrying up
+  to three times on file-handle errors (legal/document_generation.py:555-583).
+  It runs on the request thread and needs Word installed on the server.
+
+- Correction to the stated mechanism: the document covers one Statement of
+  Account and its fee lines, not "extensive transaction tables".
+
+- Not exercised: a 20-VU run against a working pos-document endpoint is the
+  test that would confirm or reject this. It should be the first script re-run
+  after the database is fixed.
+
+- Related: control numbers are assigned from a daily count, which can collide
+  when two SOAs are issued at once; the code handles this with a unique
+  constraint and up to five retries (payments/views.py:197-203).
+
+------------------------------------------------------------------------------
+9. WHAT IS NEEDED BEFORE THIS HYPOTHESIS CAN BE TESTED
+------------------------------------------------------------------------------
+- Apply the migrations to the intended database (`python manage.py migrate` in
+  backend/), after confirming DB_NAME points at the database you mean to
+  change. This run did not apply them: the database is outside this repository
+  and may be shared with another CERTI-V checkout.
+
+- Create one staff account per role with `python manage.py create_user`
+  (Receiving Officer, CTDO, Financial Analyst, Cashier, Legal Officer, ORD,
+  Records Officer) and pass the usernames through STAFF_<ROLE>_USER, or use
+  the defaults in lib.js.
+
+- Seed applications at each workflow stage, at a realistic volume, so the
+  queues and reports have rows to read.
+
+- Re-run this script. By default the workflow POSTs target id 0 and change
+  nothing; run with -e MUTATE=1 against disposable data to push real cases
+  through the transition under load.
+
+------------------------------------------------------------------------------
+10. REPRODUCE
+------------------------------------------------------------------------------
+  k6 run staff-04-assessment.js
+  Environment: BASE_URL, STAFF_<ROLE>_USER, STAFF_PASS, PEAK_VUS, MUTATE
